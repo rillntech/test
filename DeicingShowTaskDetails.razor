@@ -1,0 +1,201 @@
+
+@using Acdm.UI.AirsideOptimizer.Shared.Auth.Pages
+@using Telerik.Blazor
+@using Telerik.Blazor.Components
+@inherits AuthBasePage
+
+@if (!_isInitialDataLoadComplete)
+{
+    <div class="resource-data-spinner-wrapper">
+        <BusySpinner />
+    </div>
+}
+else
+{
+    <TelerikDialog Visible="@Visible"
+                   Width="1400px"
+                   Height="95vh"
+                   ShowCloseButton="true"
+                   Class="task-details-root"
+                   OnClose="@(() => OnClose.InvokeAsync())">
+
+        <DialogContent>
+            @if (TaskInformation is null)
+            {
+                <div class="loading-container">
+                    <TelerikLoader Size="LoaderSize.Large" />
+                    <span>Loading task details…</span>
+                </div>
+            }
+            else
+            {
+                <TelerikTabStrip ActiveTabIndexChanged="@OnTabChanged"
+                                 PersistTabContent="true"
+                                 Class="task-details-tabstrip">
+
+                    <TabStripTab Title="Task Information">
+                        <div class="accordion-wrapper">
+
+                            <!-- ================= IDENTIFICATION ================= -->
+                            <div class="acc-panel">
+                                <button type="button"
+                                        class="acc-panel-header @(_identificationExpanded ? "expanded" : "")"
+                                        @onclick="ToggleIdentification">
+                                    <span class="acc-panel-title">Identification</span>
+                                    <span class="acc-panel-chevron">@(_identificationExpanded ? "▲" : "▼")</span>
+                                </button>
+
+                                @if (_identificationExpanded)
+                                {
+                                    <div class="field-grid-3">
+                                        <div class="field-item">
+                                            <label class="field-label">Task ID (IA)</label>
+                                            <TelerikTextBox Value="@TaskInformation.Id.ToString()" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">IATA Flight Number</label>
+                                            <TelerikTextBox Value="@(TaskInformation.FlightNumber ?? "--")" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Callsign</label>
+                                            <TelerikTextBox Value="@Show(TaskInformation.Callsign)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Deicing Handler</label>
+                                            <TelerikTextBox Value="@Show(TaskInformation.DeicingHandler)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Task Type</label>
+                                            <TelerikTextBox Value="@Show(TaskInformation.ResourceType)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Resource</label>
+                                            <TelerikTextBox Value="@Show(TaskInformation.DeicingResource)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+
+                            <!-- ================= TIMES ================= -->
+                            <div class="acc-panel">
+                                <button type="button"
+                                        class="acc-panel-header @(_timesExpanded ? "expanded" : "")"
+                                        @onclick="ToggleTimes"
+                                        @onclick:stopPropagation="true">
+                                    <span class="acc-panel-title">Times</span>
+                                    <span class="acc-panel-chevron">@(_timesExpanded ? "▲" : "▼")</span>
+                                </button>
+                                <div class="acc-panel-content @(_timesExpanded ? "" : "acc-panel-content--hidden")">
+                                    <div class="field-grid-3">
+                                        <div class="field-item">
+                                            <label class="field-label">Task / Allocation Usage Status</label>
+                                            <TelerikTextBox Value="@Show(TaskInformation.FixedStatus)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Start Time (ECZT)</label>
+                                            <TelerikTextBox Value="@ShowTime(TaskInformation.StartTimeEczt)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">End Time (EEZT)</label>
+                                            <TelerikTextBox Value="@ShowTime(TaskInformation.EndTimeEezt)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Actual Start Time (ACZT)</label>
+                                            <TelerikTextBox Value="@ShowTime(TaskInformation.ActualStartTimeAczt)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Actual End Time (AEZT)</label>
+                                            <TelerikTextBox Value="@ShowTime(TaskInformation.ActualEndTimeAezt)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Planned Deicing Duration</label>
+                                            <TelerikTextBox Value="@($"{TaskInformation.PlannedDeicingDuration:00}:00:00")" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Actual Deicing Duration</label>
+                                            <TelerikTextBox Value="@($"{TaskInformation.ActualDeicingDuration:00}:00:00")" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Manual Deicing Duration</label>
+                                            <TelerikTextBox Value="@($"{TaskInformation.ManualDeicingDuration:00}:00:00")" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ================= REQUEST ================= -->
+                            <div class="acc-panel">
+                                <button type="button"
+                                        class="acc-panel-header @(_requestExpanded ? "expanded" : "")"
+                                        @onclick="ToggleRequest"
+                                        @onclick:stopPropagation="true">
+                                    <span class="acc-panel-title">Request</span>
+                                    <span class="acc-panel-chevron">@(_requestExpanded ? "▲" : "▼")</span>
+                                </button>
+                                <div class="acc-panel-content @(_requestExpanded ? "" : "acc-panel-content--hidden")">
+                                    <div class="field-grid-3">
+                                        <div class="field-item">
+                                            <label class="field-label">Requested Pad / Truck</label>
+                                            <TelerikTextBox Value="@Show(TaskInformation.RequestedPadOrTruck)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Requested Fixed Pad / Truck</label>
+                                            <TelerikTextBox Value="@Show(TaskInformation.RequestedFixedPadOrTruck)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Requested Start Time</label>
+                                            <TelerikTextBox Value="@ShowTime(TaskInformation.RequestedStartTime)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ================= OTHER ================= -->
+                            <div class="acc-panel">
+                                <button type="button"
+                                        class="acc-panel-header @(_otherExpanded ? "expanded" : "")"
+                                        @onclick="ToggleOther"
+                                        @onclick:stopPropagation="true">
+                                    <span class="acc-panel-title">Other</span>
+                                    <span class="acc-panel-chevron">@(_otherExpanded ? "▲" : "▼")</span>
+                                </button>
+                                <div class="acc-panel-content @(_otherExpanded ? "" : "acc-panel-content--hidden")">
+                                    <div class="field-grid-3">
+                                        <div class="field-item">
+                                            <label class="field-label">Fixed Status</label>
+                                            <TelerikTextBox Value="@Show(TaskInformation.FixedStatus)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Blockages</label>
+                                            <div class="toggle-wrapper">
+                                                <TelerikSwitch Value="@TaskInformation.HasBlockages" Enabled="false" OnLabel="Yes" OffLabel="No" />
+                                                <span class="toggle-text">@(TaskInformation.HasBlockages ? "Yes" : "No")</span>
+                                            </div>
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">User Comment</label>
+                                            <TelerikTextBox Value="@Show(TaskInformation.UserComment)" Enabled="false" Class="field-textbox" />
+                                        </div>
+                                        <div class="field-item">
+                                            <label class="field-label">Is Marked</label>
+                                            <div class="toggle-wrapper">
+                                                <TelerikSwitch Value="@TaskInformation.IsMarked" Enabled="false" OnLabel="Yes" OffLabel="No" />
+                                                <span class="toggle-text">@(TaskInformation.IsMarked ? "Yes" : "No")</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </TabStripTab>
+                    <TabStripTab Title="Resource View">
+                        <div class="resource-view-placeholder">
+                            <span>Resource View</span>
+                        </div>
+                    </TabStripTab>
+                </TelerikTabStrip>
+            }
+        </DialogContent>
+    </TelerikDialog>
+}

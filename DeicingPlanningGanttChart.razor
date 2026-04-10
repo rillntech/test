@@ -1,0 +1,241 @@
+@using Acdm.UI.AirsideOptimizer.Model.Deice
+@using Acdm.UI.AirsideOptimizer.Shared.Auth.Pages
+@using Deice.InformationServices.Dto.Planner
+@inherits AuthBasePage
+
+<div class="custom-gantt @(_isDragging ? "is-dragging" : "")"
+     @onpointermove="OnPointerMove"
+     @onpointerup="OnPointerUp"
+     @onpointercancel="OnPointerCancel">
+
+    @if (ShowTimeline)
+    {
+        <div class="cg-sticky-header">
+            <div class="cg-day-header">
+                @foreach (var day in _daySlots)
+                {
+                    <div class="cg-day-label" style="--cg-day-label-left:@(GetDayLabelLeftPct(day));">
+                        <span class="day-label">@day.ToString(DateTimeFormatConstants.DateFormatDDMMMMYYYY)  </span>
+                    </div>
+                }
+            </div>
+
+            <div class="cg-time-header">
+                @foreach (var slot in _timeSlots)
+                {
+                    <div class="cg-time-cell" style="--cg-slot-left:@(GetSlotLeftPct(slot)); --cg-slot-width:@(GetSlotWidthPct());">
+                        <span class="time-label">
+                            @(ShouldShowLabel(slot) ? slot.ToString(DateTimeFormatConstants.TimeFormat) : string.Empty)
+                        </span>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="cg-body">
+        @{
+            var rowIndex = 0;
+        }
+        @foreach (var item in Data ?? Enumerable.Empty<ResourceItem>())
+        {
+            var extraLines = item?.EmptyResourceLines ?? 0;
+            var currentRowIndex = rowIndex;
+            var resourceplanner = resourcePlannerDtos
+            .Find(f => f.ResourceId == item?.Id
+            && string.Equals(f.ResourceType.ToString(), item.ResourceType, StringComparison.OrdinalIgnoreCase))
+            ?? new ResourcePlannerDto();
+
+            var isDropTarget = _isDragging && _dragHoverRowIndex == currentRowIndex;
+
+            @* Snap cells for this row — populated for ALL rows when dragging *@
+            var snapCells = _isDragging ? GetSnapCellsForItem(item) : null;
+
+            <div class="cg-row @(isDropTarget ? "cg-row-drop-target" : "")"
+                 data-row-index="@currentRowIndex">
+
+                <div class="cg-timeline">
+                    @foreach (var slot in _timeSlots)
+                    {
+                        <div class="cg-grid-line" style="--cg-grid-left:@(GetSlotLeftPct(slot));"></div>
+                    }
+                </div>
+
+                @* Impairment hatching *@
+                @if (resourceplanner.Impairments.Any())
+                {
+                    foreach (var (leftPx, widthPx) in GetImpairmentSegments(resourceplanner.ResourceId))
+                    {
+                        <div class="cg-impairment-segment"
+                             style="left:@leftPx; width:@widthPx;"
+                             aria-hidden="true">
+                        </div>
+                    }
+                }
+
+                @* Availability snap-grid — shown on EVERY row while dragging,
+                   each cell is SnapCellMinutes (5 min) wide,
+                   green = available (bit '0'), red = occupied (bit '1') or impaired *@
+                @if (_isDragging && snapCells is { Count: > 0 })
+                {
+                    <div class="cg-snap-grid" aria-hidden="true">
+                        @foreach (var (leftPct, widthPct, isOccupied) in snapCells)
+                        {
+                            <div class="cg-snap-cell @(isOccupied ? "cg-av-occupied" : "cg-av-free")"
+                                 style="left:@leftPct; width:@widthPct;">
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Task pills — dragged pill rendered as ghost, original fades *@
+                @foreach (var alloc in resourceplanner?.Allocations ?? new())
+                {
+                    @if (IsAllocationVisible(alloc))
+                    {
+                        var isDragged = _dragAlloc == alloc;
+                        <div class="task-pill @(isDragged ? "task-pill-dragging" : "")"
+                             style="@(isDragged? GetDragStyle() : GetAllocationStyle(alloc))"
+                             @onpointerdown="(e) => OnPillPointerDown(e, alloc, item!, currentRowIndex)"
+                             @onpointerdown:stopPropagation="true" @oncontextmenu="@(e => OpenMenuAtClick(e, alloc))"
+                             @oncontextmenu:preventDefault="true"
+                             @oncontextmenu:stopPropagation="true" @onmouseenter="@(e => ShowTooltip(e, alloc))"
+                             @onmouseleave="@(() => HideTooltip())">
+                            <span class="pill-title">@alloc.FlightName</span>
+                        </div>
+                    }
+                }
+            </div>
+
+            rowIndex++;
+
+            @if (extraLines > 0)
+            {
+                <div class="cg-empty-resource-row" style="--cg-extra-lines:@extraLines;"></div>
+            }
+        }
+
+        <div class="marker current-time-line"
+             style="--cg-marker-left:@_currentTimeLeftPct;">
+        </div>
+
+        <div class="marker planning-horizon-line"
+             style="--cg-marker-left:@_horizonLeftPct;">
+        </div>
+    </div>
+    @if (_taskPopupInfo is not null)
+    {
+        <div class="cg-tooltip-overlay"
+             style="left:@(_tooltipX)px; top:@(_tooltipY)px;"
+             role="tooltip"
+             aria-live="polite">
+
+            @* Black left-pointing arrow anchored to the left edge of the card *@
+            <img src="../Assets/deicing-arrow-tooltip.svg"
+                 class="cg-tooltip-arrow"
+                 alt="" />
+
+            <div class="cg-tooltip-content">
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Deicing Usage:</span>
+                    <span class="cg-tooltip-value">@_taskPopupInfo.DeicingUsageId</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Otb Callsign:</span>
+                    <span class="cg-tooltip-value">@(_taskPopupInfo.OtbCallsign ?? string.Empty)</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Stand:</span>
+                    <span class="cg-tooltip-value">@(_taskPopupInfo.Stand ?? string.Empty)</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Aircraft Type:</span>
+                    <span class="cg-tooltip-value">@(_taskPopupInfo.AircraftType ?? string.Empty)</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Aircraft Size Code:</span>
+                    <span class="cg-tooltip-value">@(_taskPopupInfo.AircraftSizeCode ?? string.Empty)</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Handling Agent:</span>
+                    <span class="cg-tooltip-value">@(_taskPopupInfo.HandlingAgent ?? string.Empty)</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Deicing Type:</span>
+                    <span class="cg-tooltip-value">@(_taskPopupInfo.DeicingType ?? string.Empty)</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Deicing Resource:</span>
+                    <span class="cg-tooltip-value">@(_taskPopupInfo.DeicingResource ?? string.Empty)</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Start Time:</span>
+                    <span class="cg-tooltip-value">
+                        @(_taskPopupInfo.StartTime.HasValue
+                                            ? _taskPopupInfo.StartTime.Value.ToString("dd MMM yyyy HH:mm")
+                                            : string.Empty)
+                                                       </span>
+                                                   </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">End Time:</span>
+                    <span class="cg-tooltip-value">
+                        @(_taskPopupInfo.EndTime.HasValue
+                                            ? _taskPopupInfo.EndTime.Value.ToString("dd MMM yyyy HH:mm")
+                                            : string.Empty)
+                </span>
+            </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Actual Total Duration:</span>
+                    <span class="cg-tooltip-value">@_taskPopupInfo.ActualTotalDuration</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Outbound Progress State:</span>
+                    <span class="cg-tooltip-value">@(_taskPopupInfo.OutBoundProgressState ?? string.Empty)</span>
+                </div>
+
+                <div class="cg-tooltip-row">
+                    <span class="cg-tooltip-label">Deicing usage state:</span>
+                    <span class="cg-tooltip-value">@(_taskPopupInfo.DeIcingUsageState ?? string.Empty)</span>
+                </div>
+
+            @if (!string.IsNullOrWhiteSpace(_taskPopupInfo.Comment))
+                {
+                    <hr class="cg-tooltip-divider" />
+                    <div class="cg-tooltip-row">
+                        <span class="cg-tooltip-label">Comment:</span>
+                        <span class="cg-tooltip-value">@_taskPopupInfo.Comment</span>
+                    </div>
+                }
+
+                @* @if (_taskPopupInfo.HasOverlappingViolation)
+                {
+                    <div class="cg-tooltip-violation">
+                        <img src="../Assets/deicing-warning.svg" class="cg-tooltip-violation-icon" alt="warning" />
+                        <span class="cg-tooltip-violation-text">Overlapping violation</span>
+                    </div>
+                } *@
+
+            </div>
+        </div>
+    }
+
+@if (_taskDetailsVisible && _taskDetailsTaskId.HasValue)
+{
+    <DeicingShowTaskDetails Visible="true"
+                            TaskId="@_taskDetailsTaskId"
+                            OnClose="OnTaskDetailsClosed" />
+}
+
+</div>
